@@ -1,99 +1,122 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.services';
-import { CreateUserDto, UpdateUserDto } from './user.dto';
+import { MailerService } from '../../mailer/mailer.service';
+import { CreateUserDto } from './user.dto';
 import { Prisma } from '@prisma/client';
-import { CryptoService } from 'src/common/crypto.service';
+const crypto = require("crypto");
 
 @Injectable()
 export class UserService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly cryptoService: CryptoService,
-  ) {}
+    private mailerService: MailerService
+  ) { }
 
-  async getUsers() {
-    return await this.prisma.user.findMany({
-      where: { isDeleted: false }, 
-    });
+  generateOtp(): string {
+    return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
-  async createUser(userData: CreateUserDto) {
-    try {
-      const { encryptedText, iv } = this.cryptoService.encrypt(
-        userData.password,
-      );
-      return await this.prisma.user.create({
-        data: {
-          email: userData.email || 'dummy@gmail.com',
-          name: userData.name || 'dummy',
-          address: userData.address || 'null',
-          password: encryptedText,
-          iv: iv,
-          phone: userData.phone || 'null',
-          isActive: userData.isActive ?? true,
-        },
-      });
-    } catch (error) {
-      throw new InternalServerErrorException('Error while creating user');
-    }
+  hashData(data: string): string {
+    return crypto.createHash("sha256").update(data).digest("hex");
   }
 
-  async login(email: string, password: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { email },
+  generateKeyPair() {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: "spki", format: "pem" },
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
     });
 
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+    return { publicKey, privateKey };
+  }
+
+  extractKey(pemKey:string) {
+    return pemKey
+      .replace(/-----BEGIN .*?-----/g, "") // Remove BEGIN line
+      .replace(/-----END .*?-----/g, "")   // Remove END line
+      .replace(/\n/g, "")                  // Remove new lines
+      .trim();                              // Trim spaces
+  }
+
+  async createUser(data: { email: string }) {
+    const otp = this.generateOtp();
+
+    const is_send = await this.mailerService.sendOtpEmail(data?.email, otp)
+    if (!is_send) {
+      throw new InternalServerErrorException("Internal server error")
     }
 
-    const decryptedPassword = this.cryptoService.decrypt(
-      user.password,
-      user.iv,
-    );
+    console.log("hash email====>", this.hashData(data.email));
+    const user = await this.prisma.user.upsert({
+      where: { email: this.hashData(data.email) },
+      create: {                              // Data to create a new user if it doesn't exist
+        email: this.hashData(data.email),
+        otp: this.hashData(otp),
+      },
+      update: {                              // Data to update the existing user if it exists
+        otp: this.hashData(otp),
+        isActive: true,
+      },
+    });
 
-    if (password !== decryptedPassword) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
     return {
-      userId: user.id,
-    };
+      user,
+      otp
+    }
   }
 
-  async getUserById(id: number) {
+  async verifyOtp(data: { email: string, otp: string }) {
+
+    const emailHash = this.hashData(data.email);
+    const otpHash = this.hashData(data.otp);
+
     const user = await this.prisma.user.findUnique({
-      where: { id ,  isDeleted: false  }
-    });
+      where: {
+        email: emailHash,
+      },
+    })
+
+    console.log(user);
+
     if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found.`);
+      throw new NotFoundException("Email not found");
     }
-    return user;
-  }
 
-  async updateUser(id: number, updateUserDto: UpdateUserDto) {
-    try {
-      return await this.prisma.user.update({
-        where: { id },
-        data: updateUserDto,
-      });
-    } catch (error) {
-      throw new InternalServerErrorException('Failed to update user.');
+    if (user.otp !== otpHash) {
+      throw new BadRequestException("Invalid OTP!")
     }
-  }
 
-  async removeUser(id: number) {
-    try {
-      return await this.prisma.user.update({
-        where: { id },
-        data: { isDeleted: true },
-      });
-    } catch (error) {
-      throw new InternalServerErrorException('Failed to delete user.');
+    console.log(user.publicKey);
+    if (user.publicKey) {
+      return user;  
     }
+
+    const keys = this.generateKeyPair();
+    console.log("Public Key:\n", keys.publicKey);
+    console.log("Private Key:\n", keys.privateKey);
+
+    const updatedUser = await this.prisma.user.update({
+      where: {
+        email: emailHash,
+      },
+      data: {
+        publicKey: this.extractKey(keys.publicKey),
+      },
+    })
+
+    console.log("updatedUser=====>", updatedUser);
+
+    return {
+      user,
+      publickey: this.extractKey(keys.publicKey),
+      privatekey: this.extractKey(keys.privateKey)
+    }
+
   }
 }

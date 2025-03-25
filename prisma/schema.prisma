@@ -8,188 +8,25 @@ datasource db {
 }
 
 model User { 
-  id        Int @id @default(autoincrement())
-  email     String  @unique
-  name      String
-  address   String?
-  password  String
-  iv        String  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-  phone     String?
-  isActive Boolean @default(true)
-  isDeleted Boolean @default(false) 
+  id        Int @id   @default(autoincrement())
+  email     String    @unique  
+  otp       String?
+  isActive  Boolean   @default(true)
+  publicKey String?   @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now())
+
+  messagesSent   Message[] @relation("SentMessages")
+  messagesReceived Message[] @relation("ReceivedMessages")
 }
 
-model VehicleGroup { 
-  id       Int @id @default(autoincrement())
-  name     String  @unique
-  description   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-  isDeleted Boolean @default(false) 
+model Message {
+  id          Int @id @default(autoincrement())
+  message     String
+  sender_id   Int
+  receiver_id Int
+  isGroup     Boolean
 
-  vehicles Vehicle[] 
+  sender      User   @relation("SentMessages", fields: [sender_id], references: [id])
+  receiver    User   @relation("ReceivedMessages", fields: [receiver_id], references: [id])
 }
-
-model Vehicle {
-  id                 Int      @id @default(autoincrement())
-  registrationNo     String   @unique
-  vehicleName        String
-  model              String
-  chasisNo           String   @unique
-  engineNo           String   @unique
-  manufacturedBy     String
-  vehicleType        String
-  vehicleColor       String?
-  registrationExpiry DateTime
-  isActive           Boolean  @default(true)
-  image              String?
-  doc                String?
-  isDeleted Boolean @default(false) 
-
-  vehicleGroupId    Int 
-  vehicleGroup      VehicleGroup @relation(fields: [vehicleGroupId], references: [id] , onDelete : Cascade)
-
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @default(now())
-
-  reminders Reminder[]
-  fuelEntries  Fuel[]
-  bookings Booking[]
-  maintenanceEntries Maintenance[]
-  incomeExpense IncomeExpense[]
-}
-
-model Driver {
-  id             Int      @id @default(autoincrement())
-  name           String
-  mobileNo       String
-  age            Int
-  address        String
-  licenseNo      String   @unique
-  licenseExpiry  DateTime
-  dateOfJoining  DateTime
-  totalExp       Int
-  notes          String?
-  image          String?
-  doc            String?
-  status         CustomStatus @default(Active) 
-  isDeleted      Boolean  @default(false) 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  fuelEntries  Fuel[] 
-  bookings Booking[]
-}
-
-enum CustomStatus {
-  Active
-  Inactive
-}
-
-model Customer {
-  id             Int      @id @default(autoincrement())
-  name           String
-  mobileNo       String
-  email          String  @unique
-  address        String
-  status         CustomStatus @default(Active) 
-  isDeleted      Boolean  @default(false) 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  bookings Booking[]
-}
-
-model PartsInventory {
-  id             Int      @id @default(autoincrement())
-  name           String
-  description    String?
-  stock          Int
-  status         CustomStatus @default(Active) 
-  isDeleted      Boolean  @default(false) 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  maintenanceEntries Maintenance[]
-}
-
-model Fuel {
-  id              Int      @id @default(autoincrement())
-  vehicleId       Int
-  vehicle         Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  driverId        Int
-  driver          Driver   @relation(fields: [driverId], references: [id], onDelete: Cascade)
-  fillDate        DateTime
-  quantity        Float
-  odometerReading Int
-  amount          Float
-  comments        String?  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-}
-
-model Reminder {
-  id              Int      @id @default(autoincrement())
-  reminderDate    DateTime
-  message         String? 
-  vehicleId       Int
-  vehicle         Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-}
-
-model Booking {
-  id               Int @id @default(autoincrement())
-  customerId       Int
-  customer         Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  vehicleId        Int
-  vehicle          Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  driverId         Int
-  driver           Driver  @relation(fields: [driverId], references: [id], onDelete: Cascade)
-  tripType         String
-  tripStartDate    DateTime
-  tripEndDate      DateTime
-  tripStartLoc     String
-  tripEndLoc       String
-  totalKm          Float
-  totalAmt         Float
-  tripStatus       String
-  isDeleted        Boolean  @default(false) 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-}
-
-model Maintenance {
-  id               Int @id @default(autoincrement())
-  vehicleId        Int
-  vehicle          Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  startDate        DateTime
-  endDate          DateTime
-  details          String?
-  totalCost        Float
-  vendorName       String
-  partsInventoryId Int
-  partsInventory   PartsInventory @relation(fields: [partsInventoryId], references: [id], onDelete: Cascade)
-  quantity         Int
-  status           String
-  isDeleted        Boolean  @default(false) 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-}
-
-model IncomeExpense {
-  id            Int @id @default(autoincrement())
-  vehicleId     Int
-  vehicle       Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  date          DateTime
-  type          String
-  amount        Float
-  description   String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @default(now())
-  isDeleted     Boolean @default(false) 
-}
-
-
