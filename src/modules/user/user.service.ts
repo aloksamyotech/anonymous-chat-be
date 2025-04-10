@@ -9,57 +9,61 @@ import { PrismaService } from 'src/prisma/prisma.services';
 import { MailerService } from '../../mailer/mailer.service';
 import { CreateUserDto } from './user.dto';
 import { Prisma } from '@prisma/client';
-const crypto = require("crypto");
+const crypto = require('crypto');
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class UserService {
   constructor(
     private readonly prisma: PrismaService,
-    private mailerService: MailerService
-  ) { }
+    private mailerService: MailerService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   generateOtp(): string {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
   hashData(data: string): string {
-    return crypto.createHash("sha256").update(data).digest("hex");
+    return crypto.createHash('sha256').update(data).digest('hex');
   }
 
   generateKeyPair() {
-    const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
       modulusLength: 2048,
-      publicKeyEncoding: { type: "spki", format: "pem" },
-      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
     });
 
     return { publicKey, privateKey };
   }
 
-  extractKey(pemKey:string) {
+  extractKey(pemKey: string) {
     return pemKey
-      .replace(/-----BEGIN .*?-----/g, "") // Remove BEGIN line
-      .replace(/-----END .*?-----/g, "")   // Remove END line
-      .replace(/\n/g, "")                  // Remove new lines
-      .trim();                              // Trim spaces
+      .replace(/-----BEGIN .*?-----/g, '') // Remove BEGIN line
+      .replace(/-----END .*?-----/g, '') // Remove END line
+      .replace(/\n/g, '') // Remove new lines
+      .trim(); // Trim spaces
   }
 
   async createUser(data: { email: string }) {
     const otp = this.generateOtp();
 
-    const is_send = await this.mailerService.sendOtpEmail(data?.email, otp)
+    const is_send = await this.mailerService.sendOtpEmail(data?.email, otp);
     if (!is_send) {
-      throw new InternalServerErrorException("Internal server error")
+      throw new InternalServerErrorException('Internal server error');
     }
 
-    console.log("hash email====>", this.hashData(data.email));
+    console.log('hash email====>', this.hashData(data.email));
     const user = await this.prisma.user.upsert({
       where: { email: this.hashData(data.email) },
-      create: {                              // Data to create a new user if it doesn't exist
+      create: {
+        // Data to create a new user if it doesn't exist
         email: this.hashData(data.email),
         otp: this.hashData(otp),
       },
-      update: {                              // Data to update the existing user if it exists
+      update: {
+        // Data to update the existing user if it exists
         otp: this.hashData(otp),
         isActive: true,
       },
@@ -67,39 +71,46 @@ export class UserService {
 
     return {
       user,
-      otp
-    }
+      otp,
+    };
   }
 
-  async verifyOtp(data: { email: string, otp: string }) {
-
+  async verifyOtp(data: { email: string; otp: string }) {
     const emailHash = this.hashData(data.email);
     const otpHash = this.hashData(data.otp);
+    console.log(`data.otp`,data.otp);
+    
 
     const user = await this.prisma.user.findUnique({
       where: {
         email: emailHash,
       },
-    })
+    });
 
     console.log(user);
 
     if (!user) {
-      throw new NotFoundException("Email not found");
+      throw new NotFoundException('Email not found');
     }
+    console.log(`user.otp !== otpHash`, user.otp !== otpHash);
+    console.log(`user.otp !== otpHash`, user.otp );
 
     if (user.otp !== otpHash) {
-      throw new BadRequestException("Invalid OTP!")
+      throw new BadRequestException('Invalid OTP!');
     }
+
+    const payload = { sub: user.id, email: data.email };
+    const token = this.jwtService.sign(payload);
+    console.log(`token`, token);
 
     console.log(user.publicKey);
     if (user.publicKey) {
-      return user;  
+      return { user, token };
     }
 
     const keys = this.generateKeyPair();
-    console.log("Public Key:\n", keys.publicKey);
-    console.log("Private Key:\n", keys.privateKey);
+    console.log('Public Key:\n', keys.publicKey);
+    console.log('Private Key:\n', keys.privateKey);
 
     const updatedUser = await this.prisma.user.update({
       where: {
@@ -108,15 +119,15 @@ export class UserService {
       data: {
         publicKey: this.extractKey(keys.publicKey),
       },
-    })
+    });
 
-    console.log("updatedUser=====>", updatedUser);
+    console.log('updatedUser=====>', updatedUser);
 
     return {
+      token,
       user,
       publickey: this.extractKey(keys.publicKey),
-      privatekey: this.extractKey(keys.privateKey)
-    }
-
+      privatekey: this.extractKey(keys.privateKey),
+    };
   }
 }
