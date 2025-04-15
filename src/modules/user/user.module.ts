@@ -12,11 +12,11 @@ import { MailerModule } from 'src/mailer/mailer.module';
     CryptoModule,
     MailerModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'super-secret-key',
-      signOptions: { expiresIn: '1h' },
+      global: true,
+      secret: process.env.JWT_SECRET
     }),
   ],
   controllers: [UserController],
   providers: [UserService],
 })
-export class UserModule {}
+export class UserModule { }

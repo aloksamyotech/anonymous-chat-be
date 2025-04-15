@@ -58,12 +58,10 @@ export class UserService {
     const user = await this.prisma.user.upsert({
       where: { email: this.hashData(data.email) },
       create: {
-        // Data to create a new user if it doesn't exist
         email: this.hashData(data.email),
         otp: this.hashData(otp),
       },
       update: {
-        // Data to update the existing user if it exists
         otp: this.hashData(otp),
         isActive: true,
       },
@@ -99,7 +97,7 @@ export class UserService {
       throw new BadRequestException('Invalid OTP!');
     }
 
-    const payload = { sub: user.id, email: data.email };
+    const payload = { id: user.id, email: data.email };
     const token = this.jwtService.sign(payload);
     console.log(`token`, token);
 
