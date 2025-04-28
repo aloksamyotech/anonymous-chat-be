@@ -4,29 +4,35 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      =  env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
-model User { 
-  id        Int @id   @default(autoincrement())
-  email     String    @unique  
-  otp       String?
-  isActive  Boolean   @default(true)
-  publicKey String?   @unique
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @default(now())
+enum Status {
+  PENDING
+  DELIVERED
+}
 
-  messagesSent   Message[] @relation("SentMessages")
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  otp       String?
+  isActive  Boolean  @default(true)
+  publicKey String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  messagesSent     Message[] @relation("SentMessages")
   messagesReceived Message[] @relation("ReceivedMessages")
 }
 
 model Message {
-  id          Int @id @default(autoincrement())
+  id          Int     @id @default(autoincrement())
   message     String
   sender_id   Int
   receiver_id Int?
   isGroup     Boolean
+  status      Status
 
-  sender      User   @relation("SentMessages", fields: [sender_id], references: [id])
-  receiver    User?   @relation("ReceivedMessages", fields: [receiver_id], references: [id])
+  sender   User  @relation("SentMessages", fields: [sender_id], references: [id])
+  receiver User? @relation("ReceivedMessages", fields: [receiver_id], references: [id])
 }
